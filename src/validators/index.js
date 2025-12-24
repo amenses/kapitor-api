@@ -4,6 +4,7 @@
 const { bootstrapSchema, updateProfileSchema } = require('./userValidators');
 const { kycUpdateSchema, digilockerCallbackSchema } = require('./kycValidators');
 const { assignRoleSchema, listUsersQuerySchema } = require('./adminValidators');
+const { createWalletSchema, confirmMnemonicSchema, unlockSchema } = require('./walletValidators');
 
 module.exports = {
   bootstrapSchema,
@@ -12,5 +13,8 @@ module.exports = {
   digilockerCallbackSchema,
   assignRoleSchema,
   listUsersQuerySchema,
+  createWalletSchema,
+  confirmMnemonicSchema,
+  unlockSchema,
 };
 

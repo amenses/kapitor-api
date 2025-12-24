@@ -9,6 +9,7 @@ const KycStatus = require('./KycStatus');
 const KycDocument = require('./KycDocument');
 const DigilockerToken = require('./DigilockerToken');
 const UserBootstrapEvent = require('./UserBootstrapEvent');
+const WalletDetails = require('./WalletDetails');
 
 module.exports = {
   User,
@@ -19,5 +20,6 @@ module.exports = {
   KycDocument,
   DigilockerToken,
   UserBootstrapEvent,
+  WalletDetails,
 };
 

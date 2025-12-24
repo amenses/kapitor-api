@@ -5,7 +5,7 @@ const morgan = require('morgan');
 // const rateLimit = require('express-rate-limit');
 
 const { connectDatabase, initializeFirebase, validateEnv, env } = require('./config');
-const { usersRouter, kycRouter, adminRouter } = require('./routes');
+const { usersRouter, kycRouter, adminRouter,walletRouter } = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares');
 
 // Only import test routes in test mode
@@ -66,6 +66,7 @@ if (testRouter) {
 app.use('/users', usersRouter);
 app.use('/kyc', kycRouter);
 app.use('/admin', adminRouter);
+app.use('/wallet', walletRouter);
 
 // 404 handler
 app.use(notFoundHandler);
