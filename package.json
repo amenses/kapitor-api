@@ -1,14 +1,20 @@
 {
   "name": "kapitor-backend",
   "version": "0.1.0",
-  "description": "Node.js backend for Kapitor using Firebase Auth as IdP and MySQL for app data.",
+  "description": "Node.js backend for Kapitor using Firebase Auth as IdP and MongoDB Atlas for app data.",
   "main": "src/server.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
-    "lint": "echo \"add your linter\""
+    "lint": "eslint src --ext .js",
+    "lint:fix": "eslint src --ext .js --fix",
+    "format": "prettier --write \"src/**/*.js\"",
+    "format:check": "prettier --check \"src/**/*.js\"",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -16,11 +22,17 @@
     "firebase-admin": "^12.5.0",
     "helmet": "^7.1.0",
     "joi": "^17.13.3",
-    "morgan": "^1.10.0",
-    "mysql2": "^3.11.3"
+    "mongoose": "^8.8.1",
+    "morgan": "^1.10.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.7"
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-node": "^11.1.0",
+    "nodemon": "^3.1.7",
+    "prettier": "^3.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
-

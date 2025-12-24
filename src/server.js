@@ -2,64 +2,111 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const rateLimit = require('express-rate-limit');
-require('dotenv').config();
+// const rateLimit = require('express-rate-limit');
 
-const { verifyFirebaseToken } = require('./middleware/auth');
-const usersRouter = require('./routes/users');
-const kycRouter = require('./routes/kyc');
-const adminRouter = require('./routes/admin');
+const { connectDatabase, initializeFirebase, validateEnv, env } = require('./config');
+const { usersRouter, kycRouter, adminRouter } = require('./routes');
+const { errorHandler, notFoundHandler } = require('./middlewares');
 
+// Only import test routes in test mode
+let testRouter = null;
+if (env.testMode) {
+  testRouter = require('./routes/test');
+  console.warn('⚠️  TEST MODE ENABLED - Firebase authentication is bypassed');
+  console.warn('⚠️  DO NOT use test mode in production!');
+}
+
+// Validate environment variables
+validateEnv();
+
+// Initialize Firebase
+initializeFirebase();
+
+// Create Express app
 const app = express();
-const port = process.env.PORT || 4000;
 
-// Security and parsing middleware
+// Security middleware
 app.use(helmet());
+
+// Body parsing middleware
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// CORS
-const allowedOrigins =
-  process.env.CORS_ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) || [];
+// CORS configuration
 app.use(
   cors({
-    origin: allowedOrigins.length ? allowedOrigins : '*',
+    origin: env.corsAllowedOrigins.length > 0 ? env.corsAllowedOrigins : '*',
     credentials: true,
   })
 );
 
-// Logging
+// Logging middleware
 app.use(morgan('combined'));
 
-// Basic rate limiting
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200, // adjust to traffic
+// Rate limiting
+// const limiter = rateLimit({
+//   windowMs: env.rateLimitWindowMs,
+//   max: env.rateLimitMax,
+//   standardHeaders: true,
+//   legacyHeaders: false,
+// });
+// app.use(limiter);
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-app.use(authLimiter);
 
-// Health check
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+// Test routes (only in test mode)
+if (testRouter) {
+  app.use('/test', testRouter);
+}
 
-// Authenticated routes
-app.use('/users', verifyFirebaseToken, usersRouter);
-app.use('/kyc', verifyFirebaseToken, kycRouter);
-app.use('/admin', verifyFirebaseToken, adminRouter);
+// API routes
+app.use('/users', usersRouter);
+app.use('/kyc', kycRouter);
+app.use('/admin', adminRouter);
 
 // 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
+app.use(notFoundHandler);
+
+// Global error handler
+app.use(errorHandler);
+
+// Start server
+async function startServer() {
+  try {
+    // Connect to database
+    await connectDatabase();
+
+    // Start listening
+    const port = env.port;
+    app.listen(port, () => {
+      console.log(`🚀 API server listening on port ${port}`);
+      console.log(`📊 Environment: ${env.nodeEnv}`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Handle graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  const { disconnectDatabase } = require('./config');
+  await disconnectDatabase();
+  process.exit(0);
 });
 
-// Error handler
-// eslint-disable-next-line no-unused-vars
-app.use((err, req, res, next) => {
-  console.error(err);
-  const status = err.status || 500;
-  res.status(status).json({ error: err.message || 'Internal server error' });
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  const { disconnectDatabase } = require('./config');
+  await disconnectDatabase();
+  process.exit(0);
 });
 
-app.listen(port, () => {
-  console.log(`API listening on port ${port}`);
-});
+// Start the server
+startServer();
 
+module.exports = app;
