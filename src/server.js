@@ -7,6 +7,8 @@ const morgan = require('morgan');
 const { connectDatabase, initializeFirebase, validateEnv, env } = require('./config');
 const { usersRouter, kycRouter, adminRouter,walletRouter } = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares');
+const { startUSDTListener } = require("./listeners/usdt.listener");
+const { startCronJobs } = require("./crons");
 
 // Only import test routes in test mode
 let testRouter = null;
@@ -18,6 +20,7 @@ if (env.testMode) {
 
 // Validate environment variables
 validateEnv();
+
 
 // Initialize Firebase
 initializeFirebase();
@@ -79,7 +82,8 @@ async function startServer() {
   try {
     // Connect to database
     await connectDatabase();
-
+startUSDTListener();   // real-time
+startCronJobs();      // scheduled
     // Start listening
     const port = env.port;
     app.listen(port, () => {
