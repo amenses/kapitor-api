@@ -2,7 +2,7 @@
  * Services barrel export
  */
 const { digilockerService } = require('./external');
-const { userService, kycService, adminService, walletService } = require('./business');
+const { userService, kycService, adminService, walletService, kybService } = require('./business');
 
 module.exports = {
   digilockerService,
@@ -10,5 +10,6 @@ module.exports = {
   kycService,
   adminService,
   walletService,
+  kybService,
 };
 

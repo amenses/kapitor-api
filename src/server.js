@@ -5,7 +5,7 @@ const morgan = require('morgan');
 // const rateLimit = require('express-rate-limit');
 
 const { connectDatabase, initializeFirebase, validateEnv, env } = require('./config');
-const { usersRouter, kycRouter, adminRouter,walletRouter } = require('./routes');
+const { usersRouter, kycRouter, adminRouter, walletRouter, kybRouter } = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares');
 const { startUSDTListener } = require("./listeners/usdt.listener");
 const { startCronJobs } = require("./crons");
@@ -70,6 +70,7 @@ app.use('/users', usersRouter);
 app.use('/kyc', kycRouter);
 app.use('/admin', adminRouter);
 app.use('/wallet', walletRouter);
+app.use('/kyb', kybRouter);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -82,7 +83,7 @@ async function startServer() {
   try {
     // Connect to database
     await connectDatabase();
-startUSDTListener();   // real-time
+// startUSDTListener();   // real-time
 startCronJobs();      // scheduled
     // Start listening
     const port = env.port;
