@@ -430,9 +430,16 @@ async uploadDocument(uid, sectionKey, documentData, kybId = null) {
       throw new Error('Invalid action. Must be APPROVE, REJECT, or ACTION_REQUIRED');
     }
 
+    // Auto-transition: SUBMITTED → UNDER_REVIEW (admin starting review)
+    if (kybStatus.status === 'SUBMITTED') {
+      this._validateStatusTransition('SUBMITTED', 'UNDER_REVIEW');
+      await kybRepo.upsertStatus(uid, { status: 'UNDER_REVIEW' });
+      kybStatus.status = 'UNDER_REVIEW'; // Update local reference for subsequent checks
+    }
+
     // Validate status - all actions require UNDER_REVIEW status
     if (kybStatus.status !== 'UNDER_REVIEW') {
-      throw new Error(`KYB must be in UNDER_REVIEW status to perform ${action} action. Current status: ${kybStatus.status}`);
+      throw new Error(`KYB must be in SUBMITTED or UNDER_REVIEW status to perform ${action} action. Current status: ${kybStatus.status}`);
     }
 
     // Route to appropriate action handler

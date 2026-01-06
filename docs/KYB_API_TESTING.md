@@ -5,17 +5,20 @@
 To test KYB APIs without Firebase authentication, enable test mode:
 
 ### Option 1: Environment Variable
+
 ```bash
 export TEST_MODE=true
 ```
 
 ### Option 2: Add to .env file
+
 ```bash
 TEST_MODE=true
 NODE_ENV=development
 ```
 
 ### Option 3: Start server with test mode
+
 ```bash
 TEST_MODE=true yarn dev
 ```
@@ -27,6 +30,7 @@ TEST_MODE=true yarn dev
 In test mode, you can use any of these tokens:
 
 ### Simple Test Tokens (Recommended)
+
 ```bash
 # Default test user (uid: test-user-123, role: user)
 Authorization: Bearer test
@@ -35,6 +39,7 @@ Authorization: Bearer test-token
 ```
 
 ### Custom Test User Token
+
 ```bash
 # Format: test-{uid}-{email}-{role}
 # Example: test-myuser123-business-admin
@@ -42,12 +47,14 @@ Authorization: Bearer test-myuser123-business-admin
 ```
 
 ### No Token (Uses Default)
+
 ```bash
 # Just omit the Authorization header - uses default test user
 # (Only works in test mode)
 ```
 
 ### Admin Token
+
 ```bash
 # For admin routes, use:
 Authorization: Bearer test-admin-uid-admin-admin
@@ -68,6 +75,7 @@ curl -X POST http://localhost:4000/kyb/start \
 ```
 
 **Expected Response:**
+
 ```json
 {
   "success": true,
@@ -91,6 +99,7 @@ curl -X GET http://localhost:4000/kyb/status \
 ```
 
 **Expected Response:**
+
 ```json
 {
   "success": true,
@@ -353,6 +362,7 @@ curl -X GET http://localhost:4000/kyb/{kybId}/sections \
 ```
 
 **Expected Response:**
+
 ```json
 {
   "success": true,
@@ -506,35 +516,44 @@ curl -X POST http://localhost:4000/kyb/$KYB_ID/submit \
 ## 🚨 Common Errors
 
 ### "KYB application not found"
+
 - Make sure you've called `/kyb/start` first
 - Check that you're using the correct `kybId`
 
 ### "Invalid status transition"
+
 - Check current status with `/kyb/status`
 - Follow the status lifecycle: NOT_STARTED → IN_PROGRESS → SUBMITTED → UNDER_REVIEW → APPROVED/REJECTED
 
 ### "KYB must be in UNDER_REVIEW status to perform {action} action"
+
 - Review actions (APPROVE, REJECT, ACTION_REQUIRED) can only be performed when status is `UNDER_REVIEW`
 - Make sure KYB has been submitted and moved to UNDER_REVIEW status
 
 ### "Missing required sections"
+
 - Complete all 9 required sections before submission
 - Check section status in `/kyb/status` response
 
 ### "Total ownership percentage must equal 100%"
+
 - Sum of all owner percentages in OWNERSHIP_STRUCTURE must equal exactly 100
 
 ### "Forbidden: Insufficient permissions"
+
 - Admin routes require admin role
 - Use admin token: `test-admin-uid-admin-admin`
 
 ### "Invalid action. Must be APPROVE, REJECT, or ACTION_REQUIRED"
+
 - Unified review API requires `action` field to be one of: APPROVE, REJECT, ACTION_REQUIRED
 
 ### "Rejection reason is required"
+
 - REJECT action requires `rejectionReason` field
 
 ### "Section key is required"
+
 - ACTION_REQUIRED action requires `sectionKey` field
 
 ---
@@ -566,22 +585,35 @@ curl http://localhost:4000/test/info
 
 ## 📊 API Summary Table
 
-| Endpoint | Method | Purpose | Auth | New/Updated |
-|----------|--------|---------|------|-------------|
-| `/kyb/start` | POST | Start KYB process | Yes | - |
-| `/kyb/status` | GET | Get KYB status | Yes | - |
-| `/kyb/:kybId/section/:sectionKey` | GET | Get single section | Yes | - |
-| `/kyb/:kybId/sections` | GET | Get multiple sections | Yes | ✅ NEW |
-| `/kyb/:kybId/section/:sectionKey` | PUT | Update section | Yes | - |
-| `/kyb/:kybId/submit` | POST | Submit KYB | Yes | - |
-| `/kyb/:kybId/documents` | POST | Upload document | Yes | - |
-| `/kyb/:kybId/documents` | GET | Get documents | Yes | - |
-| `/kyb/:uid/:kybId/review` | POST | Unified review (APPROVE/REJECT/ACTION_REQUIRED) | Yes (Admin) | ✅ NEW |
-| `/kyb/:uid/:kybId/approve` | POST | Approve KYB | Yes (Admin) | Legacy |
-| `/kyb/:uid/:kybId/reject` | POST | Reject KYB | Yes (Admin) | Legacy |
-| `/kyb/:uid/:kybId/action-required` | POST | Mark action required | Yes (Admin) | Legacy |
+| Endpoint                           | Method | Purpose                                         | Auth        | New/Updated |
+| ---------------------------------- | ------ | ----------------------------------------------- | ----------- | ----------- |
+| `/kyb/start`                       | POST   | Start KYB process                               | Yes         | -           |
+| `/kyb/status`                      | GET    | Get KYB status                                  | Yes         | -           |
+| `/kyb/:kybId/section/:sectionKey`  | GET    | Get single section                              | Yes         | -           |
+| `/kyb/:kybId/sections`             | GET    | Get multiple sections                           | Yes         | ✅ NEW      |
+| `/kyb/:kybId/section/:sectionKey`  | PUT    | Update section                                  | Yes         | -           |
+| `/kyb/:kybId/submit`               | POST   | Submit KYB                                      | Yes         | -           |
+| `/kyb/:kybId/documents`            | POST   | Upload document                                 | Yes         | -           |
+| `/kyb/:kybId/documents`            | GET    | Get documents                                   | Yes         | -           |
+| `/kyb/:uid/:kybId/review`          | POST   | Unified review (APPROVE/REJECT/ACTION_REQUIRED) | Yes (Admin) | ✅ NEW      |
+| `/kyb/:uid/:kybId/approve`         | POST   | Approve KYB                                     | Yes (Admin) | Legacy      |
+| `/kyb/:uid/:kybId/reject`          | POST   | Reject KYB                                      | Yes (Admin) | Legacy      |
+| `/kyb/:uid/:kybId/action-required` | POST   | Mark action required                            | Yes (Admin) | Legacy      |
 
 ---
 
-**Happy Testing! 🚀**
+**Test Token**: `test-token` (or just `test`)
 
+**No Firebase needed!** Just:
+
+1. Set `TEST_MODE=true` in `.env`
+2. Use `Authorization: Bearer test-token` header
+3. Start testing!
+
+**Default Test User**:
+
+- UID: `test-user-123`
+- Email: `test@kapitor.com`
+- Role: `user`
+
+**Happy Testing! 🚀**
