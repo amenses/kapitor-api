@@ -13,6 +13,7 @@ const WalletDetails = require('./WalletDetails');
 const KybStatus = require('./KybStatus');
 const KybSection = require('./KybSection');
 const KybDocument = require('./KybDocument');
+const Transaction = require('./Transaction');
 
 module.exports = {
   User,
@@ -27,4 +28,5 @@ module.exports = {
   KybStatus,
   KybSection,
   KybDocument,
+  Transaction
 };
