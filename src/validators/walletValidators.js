@@ -13,8 +13,15 @@ const unlockSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+const sendCryptoSchema = Joi.object({
+  password: Joi.string().min(8).required(),
+  to: Joi.string().pattern(/^0x[a-fA-F0-9]{40}$/).required(),
+  amount: Joi.string().pattern(/^\d+(\.\d+)?$/).required(),
+});
+
 module.exports = {
   createWalletSchema,
   confirmMnemonicSchema,
   unlockSchema,
+  sendCryptoSchema,
 };

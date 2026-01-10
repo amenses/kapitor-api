@@ -1,7 +1,8 @@
-const { walletDetailsRepo } = require('../../repos');
+const { walletDetailsRepo, transactionRepo } = require('../../repos');
 const { encrypt, decrypt } = require('../../utils/crypto');
 const bcrypt = require('bcrypt');
 const { ethers } = require('ethers');
+const provider = new ethers.JsonRpcProvider(process.env.ETH_RPC_URL);
 
 class WalletService {
   /**
@@ -125,6 +126,137 @@ class WalletService {
   async findByWalletAddress(address) {
     return walletDetailsRepo.findByWalletAddress(address);
   }
+  /**
+     * Get ETH balance of user's wallet
+     * @param {string} uid
+     * @returns {Promise<Object>}
+     */
+  async getBalance(uid) {
+    if (!uid) {
+      throw new Error('uid is required');
+    }
+
+    const wallet = await walletDetailsRepo.findByUid(uid);
+    if (!wallet) {
+      throw new Error('Wallet not found');
+    }
+
+    const balanceWei = await provider.getBalance(wallet.walletAddress);
+    const balanceEth = ethers.formatEther(balanceWei);
+
+    return {
+      address: wallet.walletAddress,
+      chain: 'ethereum',
+      network: process.env.ETH_NETWORK,
+      balance: balanceEth,
+      unit: 'ETH',
+    };
+  }
+
+  /**
+   * Send ETH from user's wallet
+   * @param {string} uid
+   * @param {Object} payload
+   * @param {string} payload.password
+   * @param {string} payload.to
+   * @param {string} payload.amount (ETH)
+   * @returns {Promise<Object>}
+   */
+  async sendCrypto(uid, payload = {}) {
+    const { password, to, amount } = payload;
+
+    if (!uid) {
+      throw new Error('uid is required');
+    }
+
+    if (!password || !to || !amount) {
+      throw new Error('password, to and amount are required');
+    }
+
+    const walletRecord = await walletDetailsRepo.findByUid(uid);
+    if (!walletRecord) {
+      throw new Error('Wallet not found');
+    }
+
+    if (!walletRecord.verified) {
+      throw new Error('Mnemonic not verified');
+    }
+
+    const isValid = await bcrypt.compare(password, walletRecord.password);
+    if (!isValid) {
+      throw new Error('Invalid password');
+    }
+
+    const encrypted = JSON.parse(walletRecord.privateKey);
+    const privateKey = decrypt(encrypted, password);
+
+    const wallet = new ethers.Wallet(privateKey, provider);
+
+    const txRequest = {
+      to,
+      value: ethers.parseEther(amount),
+    };
+
+    const gasLimit = await provider.estimateGas({
+      ...txRequest,
+      from: wallet.address,
+    });
+
+    const gasPrice = await provider.getGasPrice();
+
+    const txResponse = await wallet.sendTransaction({
+      ...txRequest,
+      gasLimit,
+      gasPrice,
+    });
+
+    await transactionRepo.create({
+      uid,
+      chain: 'ethereum',
+      network: process.env.ETH_NETWORK,
+      txHash: txResponse.hash,
+      fromAddress: wallet.address,
+      toAddress: to,
+      assetType: 'native',
+      symbol: 'ETH',
+      decimals: 18,
+      amount,
+      fee: ethers.formatEther(gasLimit * gasPrice),
+      direction: 'out',
+      type: 'transfer',
+      status: 'pending',
+      rawTx: txResponse,
+    });
+
+    return {
+      message: 'Transaction submitted',
+      txHash: txResponse.hash,
+    };
+  }
+
+  /**
+   * Get wallet address for receiving crypto
+   * @param {string} uid
+   * @returns {Promise<Object>}
+   */
+  async receiveCrypto(uid) {
+    if (!uid) {
+      throw new Error('uid is required');
+    }
+
+    const wallet = await walletDetailsRepo.findByUid(uid);
+    if (!wallet) {
+      throw new Error('Wallet not found');
+    }
+
+    return {
+      address: wallet.walletAddress,
+      chain: 'ethereum',
+      network: process.env.ETH_NETWORK,
+      message: 'Use this address to receive ETH',
+    };
+  }
 }
+
 
 module.exports = new WalletService();

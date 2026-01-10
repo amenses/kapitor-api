@@ -9,6 +9,7 @@ const digilockerRepo = require('./digilockerRepo');
 const userBootstrapRepo = require('./userBootstrapRepo');
 const walletDetailsRepo = require('./walletDetails');
 const kybRepo = require('./kybRepo');
+const transactionRepo = require('./transactionRepo');
 
 module.exports = {
   userRepo,
@@ -19,5 +20,6 @@ module.exports = {
   userBootstrapRepo,
   walletDetailsRepo,
   kybRepo,
+  transactionRepo
 };
 
