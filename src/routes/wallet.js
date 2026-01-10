@@ -54,4 +54,10 @@ router.get(
     walletController.receiveCrypto.bind(walletController)
 );
 
+// GET /wallet/check-ept-eligibility
+router.get(
+    '/check-ept-eligibility',
+    walletController.checkEPTEligibility.bind(walletController)
+);
+
 module.exports = router;

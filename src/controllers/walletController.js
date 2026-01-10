@@ -81,6 +81,20 @@ class WalletController {
       next(error);
     }
   }
+
+  /**
+ * Check EPT eligibility
+ */
+  async checkEPTEligibility(req, res, next) {
+    try {
+      const { uid } = req.user;
+      const result = await walletService.checkEPTEligibility(uid);
+      sendSuccess(res, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }
 
 module.exports = new WalletController();

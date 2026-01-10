@@ -256,6 +256,34 @@ class WalletService {
       message: 'Use this address to receive ETH',
     };
   }
+
+  /**
+ * Check EPT eligibility based on wallet balance
+ * @param {string} uid
+ * @returns {Promise<Object>}
+ */
+  async checkEPTEligibility(uid) {
+    if (!uid) {
+      throw new Error('uid is required');
+    }
+
+    const wallet = await walletDetailsRepo.findByUid(uid);
+    if (!wallet) {
+      throw new Error('Wallet not found');
+    }
+
+    const balanceWei = await provider.getBalance(wallet.walletAddress);
+    const balance = Number(ethers.formatEther(balanceWei));
+
+    const isEligible = balance >= 100000;
+
+    return {
+      address: wallet.walletAddress,
+      balance,
+      eligible: isEligible,
+    };
+  }
+
 }
 
 
