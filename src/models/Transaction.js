@@ -4,11 +4,10 @@ const { Schema } = mongoose;
 
 const transactionSchema = new Schema(
   {
-    // User reference
+    // User reference (optional because some flows only rely on uid)
     userId: {
       type: Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
       index: true,
     },
 
@@ -132,6 +131,10 @@ const transactionSchema = new Schema(
 
     rawTx: {
       type: Schema.Types.Mixed,
+    },
+    context: {
+      type: String,
+      trim: true,
     },
   },
   {

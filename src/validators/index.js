@@ -4,7 +4,7 @@
 const { bootstrapSchema, updateProfileSchema } = require('./userValidators');
 const { kycUpdateSchema, digilockerCallbackSchema } = require('./kycValidators');
 const { assignRoleSchema, listUsersQuerySchema } = require('./adminValidators');
-const { createWalletSchema, confirmMnemonicSchema, unlockSchema } = require('./walletValidators');
+const { createWalletSchema, confirmMnemonicSchema, unlockSchema, sendCryptoSchema, sendTokenSchema } = require('./walletValidators');
 const {
   updateSectionSchema,
   uploadDocumentSchema,
@@ -13,6 +13,7 @@ const {
   actionRequiredSchema,
   reviewSchema,
 } = require('./kybValidators');
+const { linkBankAccountSchema, depositIntentSchema } = require('./fiatValidators');
 
 module.exports = {
   bootstrapSchema,
@@ -24,11 +25,14 @@ module.exports = {
   createWalletSchema,
   confirmMnemonicSchema,
   unlockSchema,
+  sendCryptoSchema,
+  sendTokenSchema,
   updateSectionSchema,
   uploadDocumentSchema,
   approveSchema,
   rejectSchema,
   actionRequiredSchema,
   reviewSchema,
+  linkBankAccountSchema,
+  depositIntentSchema,
 };
-

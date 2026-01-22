@@ -5,7 +5,15 @@ const morgan = require('morgan');
 // const rateLimit = require('express-rate-limit');
 
 const { connectDatabase, initializeFirebase, validateEnv, env } = require('./config');
-const { usersRouter, kycRouter, adminRouter, walletRouter, kybRouter, transactionRouter } = require('./routes');
+const {
+  usersRouter,
+  kycRouter,
+  adminRouter,
+  walletRouter,
+  kybRouter,
+  transactionRouter,
+  fiatRouter,
+} = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middlewares');
 const { startUSDTListener } = require("./listeners/usdt.listener");
 const { startCronJobs } = require("./crons");
@@ -31,8 +39,15 @@ const app = express();
 // Security middleware
 app.use(helmet());
 
-// Body parsing middleware
-app.use(express.json({ limit: '2mb' }));
+// Body parsing middleware (capture raw body for webhooks)
+app.use(
+  express.json({
+    limit: '2mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString();
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // CORS configuration
@@ -72,6 +87,7 @@ app.use('/admin', adminRouter);
 app.use('/wallet', walletRouter);
 app.use('/kyb', kybRouter);
 app.use('/transaction', transactionRouter);
+app.use('/fiat', fiatRouter);
 
 // 404 handler
 app.use(notFoundHandler);

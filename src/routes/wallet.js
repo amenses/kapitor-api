@@ -3,10 +3,11 @@ const { walletController } = require('../controllers');
 const { verifyFirebaseToken } = require('../middlewares');
 const { validate } = require('../utils');
 const {
-    createWalletSchema,
-    confirmMnemonicSchema,
-    unlockSchema,
-    sendCryptoSchema,
+  createWalletSchema,
+  confirmMnemonicSchema,
+  unlockSchema,
+  sendCryptoSchema,
+  sendTokenSchema,
 } = require('../validators');
 
 const router = express.Router();
@@ -36,23 +37,26 @@ router.post(
 );
 
 // GET /wallet/balance
-router.get(
-    '/balance',
-    walletController.getBalance.bind(walletController)
-);
+router.get('/balance', walletController.getBalance.bind(walletController));
+
+// GET /wallet/balances
+router.get('/balances', walletController.getBalances.bind(walletController));
 
 // POST /wallet/send
-router.post(
-    '/send',
-    validate(sendCryptoSchema),
-    walletController.sendCrypto.bind(walletController)
-);
+router.post('/send', validate(sendCryptoSchema), walletController.sendCrypto.bind(walletController));
 
 // GET /wallet/receive
-router.get(
-    '/receive',
-    walletController.receiveCrypto.bind(walletController)
+router.get('/receive', walletController.receiveCrypto.bind(walletController));
+
+// POST /wallet/token/send
+router.post(
+  '/token/send',
+  validate(sendTokenSchema),
+  walletController.sendToken.bind(walletController)
 );
+
+// GET /wallet/token/receive
+router.get('/token/receive', walletController.receiveToken.bind(walletController));
 
 // GET /wallet/check-ept-eligibility
 router.get(

@@ -10,6 +10,9 @@ const userBootstrapRepo = require('./userBootstrapRepo');
 const walletDetailsRepo = require('./walletDetails');
 const kybRepo = require('./kybRepo');
 const transactionRepo = require('./transactionRepo');
+const depositRequestRepo = require('./depositRequest');
+const fiatAccountRepo = require('./fiatAccount');
+const fiatLedgerRepo = require('./fiatLedger');
 
 module.exports = {
   userRepo,
@@ -20,6 +23,8 @@ module.exports = {
   userBootstrapRepo,
   walletDetailsRepo,
   kybRepo,
-  transactionRepo
+  transactionRepo,
+  depositRequestRepo,
+  fiatAccountRepo,
+  fiatLedgerRepo
 };
-

@@ -1,4 +1,4 @@
-const { walletService } = require('../services');
+const { walletService, balanceService, tokenTransferService } = require('../services');
 const { sendSuccess } = require('../utils/response');
 
 class WalletController {
@@ -95,6 +95,44 @@ class WalletController {
     }
   }
 
+  /**
+   * Get combined fiat + token + native balances
+   */
+  async getBalances(req, res, next) {
+    try {
+      const { uid } = req.user;
+      const balances = await balanceService.getUserBalances(uid);
+      sendSuccess(res, balances, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Send Kapitor token (KPT)
+   */
+  async sendToken(req, res, next) {
+    try {
+      const { uid } = req.user;
+      const result = await tokenTransferService.send(uid, req.body);
+      sendSuccess(res, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Get details for receiving KPT
+   */
+  async receiveToken(req, res, next) {
+    try {
+      const { uid } = req.user;
+      const result = await tokenTransferService.receive(uid);
+      sendSuccess(res, result, 200);
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = new WalletController();

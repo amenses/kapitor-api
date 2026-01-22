@@ -7,6 +7,7 @@ const adminRouter = require('./admin');
 const walletRouter = require('./wallet');
 const kybRouter = require('./kyb');
 const transactionRouter = require('./transaction');
+const fiatRouter = require('./fiat');
 
 module.exports = {
   usersRouter,
@@ -14,6 +15,6 @@ module.exports = {
   adminRouter,
   walletRouter,
   kybRouter,
-  transactionRouter
+  transactionRouter,
+  fiatRouter
 };
-

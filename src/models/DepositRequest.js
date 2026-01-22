@@ -1,94 +1,105 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
 const DepositRequestSchema = new mongoose.Schema(
   {
     userId: {
       type: String,
       required: true,
-      unique: true,
       index: true,
     },
-
     walletAddress: {
       type: String,
       required: true,
       index: true,
     },
-
-    // USDT always for now — but future-proof
     token: {
       type: String,
-      default: "USDT",
+      default: 'USDT',
     },
-
     network: {
       type: String,
-      default: "ethereum",
+      default: 'ethereum',
     },
-
-    // User’s intended deposit (can be null)
     expectedAmount: {
       type: Number,
       default: null,
     },
-
-    // Actual on-chain amount
     actualAmount: {
       type: Number,
       default: null,
     },
-
     txHash: {
       type: String,
       default: null,
       index: true,
       sparse: true,
     },
-
     confirmations: {
       type: Number,
       default: 0,
     },
-
     status: {
       type: String,
-      enum: [
-        "waiting",              // user created request
-        "pending_confirmation", // tx found but not confirmed
-        "confirmed",            // credited
-        "failed",               // tx reverted / invalid
-        "manual",               // admin credited
-      ],
-      default: "waiting",
+      enum: ['waiting', 'pending_confirmation', 'confirmed', 'failed', 'manual'],
+      default: 'waiting',
       index: true,
     },
-
-    // request (user flow) | manual (admin-funded)
     type: {
       type: String,
-      enum: ["request", "manual"],
-      default: "request",
+      enum: ['request', 'manual'],
+      default: 'request',
       index: true,
     },
-
     requestedAt: {
       type: Date,
       default: Date.now,
     },
-
     receivedAt: {
       type: Date,
       default: null,
+    },
+    fiatAmount: {
+      type: Number,
+      default: null,
+    },
+    fiatCurrency: {
+      type: String,
+      default: 'INR',
+    },
+    fiatStatus: {
+      type: String,
+      enum: ['initiated', 'pending', 'credited', 'minted', 'failed'],
+      default: 'initiated',
+      index: true,
+    },
+    gatewayPaymentId: {
+      type: String,
+      index: true,
+      sparse: true,
+    },
+    gatewayReferenceId: {
+      type: String,
+      trim: true,
+    },
+    virtualAccountId: {
+      type: String,
+      trim: true,
+    },
+    virtualUpiId: {
+      type: String,
+      trim: true,
+    },
+    remarks: {
+      type: String,
+      trim: true,
     },
   },
   { timestamps: true }
 );
 
-// Helpful indexes
 DepositRequestSchema.index({ walletAddress: 1, status: 1 });
 DepositRequestSchema.index({ txHash: 1 });
+DepositRequestSchema.index({ virtualAccountId: 1, fiatStatus: 1 });
+DepositRequestSchema.index({ gatewayPaymentId: 1 });
 
-module.exports = mongoose.model(
-  "DepositRequest",
-  DepositRequestSchema
-);
+module.exports = mongoose.model('DepositRequest', DepositRequestSchema);

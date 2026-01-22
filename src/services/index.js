@@ -1,16 +1,33 @@
 /**
  * Services barrel export
  */
-const { digilockerService } = require('./external');
-const { userService, kycService, adminService, walletService, kybService, transactionService } = require('./business');
-
-module.exports = {
-  digilockerService,
+const { digilockerService, paymentGatewayService } = require('./external');
+const {
   userService,
   kycService,
   adminService,
   walletService,
   kybService,
-  transactionService
-};
+  transactionService,
+  fiatAccountService,
+  fiatDepositService,
+  balanceService,
+  tokenTransferService,
+  kapitorTokenService,
+} = require('./business');
 
+module.exports = {
+  digilockerService,
+  paymentGatewayService,
+  userService,
+  kycService,
+  adminService,
+  walletService,
+  kybService,
+  transactionService,
+  fiatAccountService,
+  fiatDepositService,
+  balanceService,
+  tokenTransferService,
+  kapitorTokenService,
+};

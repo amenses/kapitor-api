@@ -7,6 +7,7 @@ const adminController = require('./adminController');
 const walletController = require('./walletController');
 const kybController = require('./kybController');
 const transactionController = require('./transactionController');
+const fiatController = require('./fiatController');
 
 module.exports = {
   userController,
@@ -14,6 +15,6 @@ module.exports = {
   adminController,
   walletController,
   kybController,
-  transactionController
+  transactionController,
+  fiatController
 };
-

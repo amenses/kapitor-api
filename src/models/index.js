@@ -10,10 +10,13 @@ const KycDocument = require('./KycDocument');
 const DigilockerToken = require('./DigilockerToken');
 const UserBootstrapEvent = require('./UserBootstrapEvent');
 const WalletDetails = require('./WalletDetails');
+const FiatAccount = require('./FiatAccount');
+const FiatLedger = require('./FiatLedger');
 const KybStatus = require('./KybStatus');
 const KybSection = require('./KybSection');
 const KybDocument = require('./KybDocument');
 const Transaction = require('./Transaction');
+const DepositRequest = require('./DepositRequest');
 
 module.exports = {
   User,
@@ -25,8 +28,11 @@ module.exports = {
   DigilockerToken,
   UserBootstrapEvent,
   WalletDetails,
+  FiatAccount,
+  FiatLedger,
   KybStatus,
   KybSection,
   KybDocument,
-  Transaction
+  Transaction,
+  DepositRequest
 };
