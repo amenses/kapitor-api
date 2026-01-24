@@ -17,13 +17,13 @@ Out of scope for this iteration: automated trading, multi-token support, liquida
 | Background processing | `src/crons/depositConfirm.cron.js`, `listeners/usdt.listener.js` | Provides a pattern for long-running workers (will add gateway webhook handler + ERC20 mint queue). |
 
 ## 3. Payment Gateway Decision
-**Recommendation: Cashfree Auto Collect + Payout**
-- Cashfree provides **Auto Collect virtual accounts** (bank account + UPI handles) that can be spun up per user, yet still settle into Kapitor’s INR collection account, making reconciliation with `deposit_requests` straightforward.
-- Webhook-first notifications with cryptographic signatures allow us to capture NEFT/IMPS/RTGS/UPI credits in real time and tie the sender bank account to the verified user record.
-- Same Cashfree account also gives us **Payout APIs** for future fiat withdrawals, so we do not need a second provider when we enable redemption.
-- Sandbox credentials (App ID + Secret Key) plus gamma (staging) base URLs make it easy to run the full flow locally by simply swapping env vars; when scaling beyond India we can plug in RazorpayX/Stripe because gateway calls stay behind `paymentGatewayService`.
+**Recommendation: Stripe Payments (Payment Intents + bank/UPI rails)**
+- Stripe Payment Intents support cards, ACH/SEPA, UPI, and bank transfers into the same treasury account, letting us issue Kapitor Tokens as soon as an intent succeeds.
+- Stripe webhooks deliver signed `payment_intent.*` events that we verify in the backend before minting, so reconciliation ties directly to Stripe’s metadata (`depositId`, `uid`).
+- Test mode credentials (the standard `sk_test`, `pk_test`, and webhook secret) mean we can run the entire onramp locally with ngrok exposing `/fiat/webhook/stripe`.
+- Because our gateway logic is abstracted behind `paymentGatewayService`, swapping to Stripe Treasury or another PSP later is limited to that adapter.
 
-_Fallback_: RazorpayX Virtual Accounts (India) or Stripe Payment Intents (global ACH) — the rest of the blueprint is provider-agnostic so swapping gateways is mostly configuration.
+_Fallback_: Cashfree AutoCollect (India) or RazorpayX VAs if we need localized rails; the rest of the blueprint stays unchanged.
 
 ## 4. Proposed Architecture
 ```
@@ -48,7 +48,7 @@ Blockchain Bridge (ethers.js) ─── KapitorToken ERC20 contract
 
 ### New / Updated Services
 1. **`fiatAccountService`** – stores user bank metadata, links it with custodial wallet (`walletAddress`) and gateway virtual-account identifiers.
-2. **`paymentGatewayService`** – wraps Cashfree Auto Collect/Payout APIs: create VA/UPI handles, fetch payment status, verify sender bank account, handle webhook signature validation.
+2. **`paymentGatewayService`** – wraps Stripe’s REST APIs: create Payment Intents (cards/UPI/bank), fetch status, and validate webhook signatures for `payment_intent.*` events.
 3. **`kapitorTokenService`** – thin ethers.js wrapper around the Kapitor ERC20 contract (mint/burn/transfer, using treasury signer; signer key sits in env `KAPITOR_TREASURY_PK`).
 4. **`balanceService`** – aggregates fiat ledger + on-chain/token ledger to supply combined balances for the `/balances` API.
 5. **`tokenTransferService`** – orchestrates send/receive for KPT using users’ custodial wallets (reuse encryption logic from `walletService` but with ERC20 instead of native ETH).
@@ -90,17 +90,17 @@ Admin-only helper endpoints (later): `/admin/fiat/manual-credit`, `/admin/fiat/r
 ## 8. Key Flows
 
 ### 8.1 User Bank Attachment
-1. Client calls `POST /fiat/account` with bank metadata (account number, IFSC, account holder name). Use gateway penny-drop/verification API.
-2. On success, store record in `fiat_accounts` with `walletAddress` from `wallet_details`. Also create a Cashfree Auto Collect VA tied to that user; persist `virtualAccountId` + instructions (account number, IFSC, virtual UPI ID).
-3. Return VA instructions to client so the user always deposits to their allocated account (reduces reconciliation complexity).
+1. Client calls `POST /fiat/account` with bank metadata (account number, IFSC, account holder name). We simply store this locally to link fiat identity ↔ wallet; Stripe does not require a pre-issued virtual account.
+2. Persist the record in `fiat_accounts` with `walletAddress` from `wallet_details`, along with optional metadata (contact email/phone) for Stripe receipts.
+3. Respond with confirmation; deposits will instead expose Stripe Payment Intent instructions per transaction (card/UPI/bank transfer) rather than a static VA.
 
 ### 8.2 Fiat Deposit → KPT Mint
-1. User transfers fiat to provided VA (manual bank transfer or UPI). Gateway notifies via webhook.
-2. Webhook controller verifies signature, finds matching VA → maps to `uid`, upserts `deposit_request` (`fiatStatus: 'credited'`, `actualAmount` in base currency).
-3. Append ledger entry in `fiat_ledger` (status `credited`). Create job `mint-request` (Bull queue or cron) with `uid`, `amount`, `walletAddress`.
-4. Worker consumes job: calls `kapitorTokenService.mintTo(walletAddress, amount)`; waits for on-chain confirmations (similar to `depositConfirm.cron`).
-5. On success, update `deposit_request.status = 'confirmed'`, create `transactions` entry (`assetType: 'token'`, `symbol: 'KPT'`, `direction: 'in'`, `status: 'confirmed'`, `context: 'fiat_deposit'`), and update ledger `fiatStatus = 'settled'`.
-6. If mint fails, leave ledger entry as `error` and alert ops; funds remain fiat liability until retried/refunded.
+1. Backend creates a Stripe Payment Intent (cards/UPI/bank) with metadata (`depositId`, `uid`) and returns the client secret + publishable key to the app.
+2. Client completes the payment using Stripe Elements/UPI flows. Stripe emits `payment_intent.succeeded`.
+3. Webhook controller validates the Stripe signature, resolves the deposit via metadata/Payment Intent id, and marks the `deposit_request` as `fiatStatus='credited'`.
+4. Append ledger entry in `fiat_ledger` (status `credited`), then mint Kapitor Tokens by calling `kapitorTokenService.mintTo(walletAddress, amount)`; on success mark ledger `settled`.
+5. Update `deposit_request.status = 'confirmed'`, create a `transactions` row with `context: 'fiat_deposit'`, and return success to Stripe (200).
+6. If Stripe reports `payment_intent.payment_failed`/`canceled`, flag the deposit as `failed` so the UI can prompt for a retry.
 
 ### 8.3 Send / Receive KPT
 - **Receive**: same as ETH receive – `GET /wallet/token/receive` returns wallet address + token contract info (chainId, decimals). Client shares this for inbound transfers.
@@ -144,8 +144,8 @@ Response example:
    - Add `fiatStatus`/gateway fields to `DepositRequest`.
    - Build `fiatAccountService` + controller endpoints for bank linking.
 2. **Gateway Integration**
-   - Implement `paymentGatewayService` for Cashfree Auto Collect (VA/UPI creation) plus webhook verification.
-   - Register webhook route, map payload → deposit + ledger.
+   - Implement `paymentGatewayService` for Stripe Payment Intents + webhook verification.
+   - Register `/fiat/webhook/stripe`, map events → deposit + ledger.
 3. **Token Lifecycle**
    - Deploy KapitorToken on testnet, add `kapitorTokenService`, configure envs.
    - Build mint worker & extend listener to capture KPT transfers.
@@ -172,10 +172,10 @@ All sensitive values live in `.env` (copy from the tracked `.env.example`). Mini
 | `RPC_WS_URL`, `RPC_HTTP_URL`, `CONFIRMATION_TARGET` | Chain listeners/cron for confirmations. |
 | `KPT_TOKEN_ADDRESS`, `KPT_TOKEN_DECIMALS` (default 6) | Kapitor ERC20 metadata. |
 | `KAPITOR_TREASURY_PK` | Encrypted private key for treasury signer (never commit real key). |
-| `CASHFREE_BASE_URL`, `CASHFREE_APP_ID`, `CASHFREE_SECRET_KEY` | Cashfree Auto Collect credentials. |
-| `CASHFREE_PAYOUT_BASE_URL`, `CASHFREE_PAYOUT_CLIENT_ID`, `CASHFREE_PAYOUT_CLIENT_SECRET` | Cashfree payout creds for future withdrawals. |
-| `CASHFREE_WEBHOOK_SECRET` | Used to validate webhook signatures. |
-| `CASHFREE_VA_PREFIX` | Prefix used when generating per-user virtual account labels. |
+| `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` | Stripe API credentials (test or live). |
+| `STRIPE_WEBHOOK_SECRET`, `STRIPE_WEBHOOK_TOLERANCE` | Used to validate Stripe webhook signatures. |
+| `STRIPE_DEFAULT_CURRENCY`, `STRIPE_PAYMENT_METHOD_TYPES` | Controls Payment Intent currency + allowed methods (e.g., `card,upi`). |
+| `STRIPE_CUSTOMER_PREFIX` | Optional prefix when storing user-facing Stripe customer ids. |
 | `TEST_MODE`, `TEST_USER_ID`, `TEST_USER_EMAIL` | Existing test harness toggles. |
 
 Any new module we add (fiat accounts, ledger, token service) should read configuration exclusively through env vars so deployments only require editing `.env`.

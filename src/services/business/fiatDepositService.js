@@ -25,114 +25,127 @@ class FiatDepositService {
       walletAddress: account.walletAddress,
       expectedAmount: amount,
       fiatAmount: amount,
-      fiatCurrency: payload.currency || 'INR',
+      fiatCurrency: (payload.currency || process.env.STRIPE_DEFAULT_CURRENCY || 'USD').toUpperCase(),
       fiatStatus: 'initiated',
-      virtualAccountId: account.virtualAccountId,
-      virtualUpiId: account.virtualUpiId,
+    });
+
+    const paymentIntent = await paymentGatewayService.createPaymentIntent({
+      amount,
+      currency: deposit.fiatCurrency,
+      customerEmail: payload.email || account?.metadata?.email,
+      description: `Kapitor fiat deposit ${deposit._id}`,
+      metadata: {
+        depositId: deposit._id.toString(),
+        uid,
+      },
+    });
+
+    await depositRequestRepo.attachGatewayInfo(deposit._id, {
+      gatewayPaymentId: paymentIntent.id,
+      amount,
+      currency: deposit.fiatCurrency,
+      fiatStatus: 'pending',
+      clientSecret: paymentIntent.client_secret,
+      customerId: paymentIntent.customer,
     });
 
     return {
-      intentId: deposit._id,
+      depositId: deposit._id,
       amount,
       currency: deposit.fiatCurrency,
-      instructions: {
-        accountHolder: account.accountHolder,
-        bankAccountNumber: account.virtualAccountNumber || account.bankAccountNumber,
-        ifsc: account.virtualIfsc || account.ifsc,
-        bankName: account.bankName || 'Cashfree Partner Bank',
-        upiId: account.virtualUpiId,
-        reference: payload.reference || deposit._id.toString(),
-      },
+      paymentIntentId: paymentIntent.id,
+      clientSecret: paymentIntent.client_secret,
+      publishableKey: paymentGatewayService.publishableKey,
+      status: 'pending',
     };
   }
 
   async handleGatewayWebhook(rawBody, headers = {}) {
-    const signature = headers['x-webhook-signature'] || headers['x-signature'];
-    if (!paymentGatewayService.verifyWebhookSignature(rawBody, signature)) {
-      throw new Error('Invalid Cashfree webhook signature');
+    const signature =
+      headers['stripe-signature'] || headers['Stripe-Signature'] || headers['stripe_signature'];
+
+    const { payload } = paymentGatewayService.verifyWebhookSignature(rawBody, signature);
+    const event = payload;
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        return this.handlePaymentIntentSucceeded(event.data.object);
+      case 'payment_intent.payment_failed':
+      case 'payment_intent.canceled':
+        return this.handlePaymentIntentFailure(event.data.object);
+      default:
+        return { ignored: true, reason: `Unhandled event ${event.type}` };
     }
+  }
 
-    const payload = JSON.parse(rawBody.toString('utf8') || '{}');
-    const event = paymentGatewayService.parseDepositPayload(payload);
-    if (!event || !event.virtualAccountId) {
-      throw new Error('Unsupported webhook payload');
-    }
-
-    if (!['SUCCESS', 'VA_CREDIT', 'COMPLETED'].includes(event.status)) {
-      return { ignored: true, reason: `Status ${event.status}` };
-    }
-
-    const account = await fiatAccountRepo.findByVirtualAccountId(event.virtualAccountId);
-    if (!account) {
-      throw new Error(`No fiat account mapped for virtual account ${event.virtualAccountId}`);
-    }
-
-    let deposit =
-      (event.gatewayPaymentId && (await depositRequestRepo.findByGatewayPaymentId(event.gatewayPaymentId))) ||
-      (await depositRequestRepo.findLatestByVirtualAccountId(event.virtualAccountId));
-
+  async handlePaymentIntentSucceeded(intent) {
+    const deposit = await this.findDepositForIntent(intent);
     if (!deposit) {
-      deposit = await depositRequestRepo.createFiatIntent({
-        userId: account.uid,
-        walletAddress: account.walletAddress,
-        expectedAmount: event.amount,
-        fiatAmount: event.amount,
-        fiatCurrency: event.currency,
-        fiatStatus: 'pending',
-        virtualAccountId: event.virtualAccountId,
-        virtualUpiId: account.virtualUpiId,
-      });
+      return { ignored: true, reason: 'Deposit not found for payment_intent' };
     }
 
-    deposit = await depositRequestRepo.attachGatewayInfo(deposit._id, {
-      gatewayPaymentId: event.gatewayPaymentId,
-      gatewayReferenceId: event.referenceId,
-      amount: event.amount,
-      currency: event.currency,
-      virtualAccountId: event.virtualAccountId,
-      virtualUpiId: account.virtualUpiId,
+    if (deposit.fiatStatus === 'minted') {
+      return { alreadyProcessed: true };
+    }
+
+    const amount = paymentGatewayService.fromMinorUnits(
+      intent.amount_received || intent.amount,
+      intent.currency
+    );
+    const currency = (intent.currency || deposit.fiatCurrency || 'usd').toUpperCase();
+
+    const account = await fiatAccountRepo.findByUid(deposit.userId);
+    if (!account) {
+      throw new Error('Fiat account missing for deposit');
+    }
+
+    await depositRequestRepo.attachGatewayInfo(deposit._id, {
+      gatewayPaymentId: intent.id,
+      gatewayReferenceId: intent.latest_charge,
+      amount,
+      currency,
       fiatStatus: 'credited',
-      receivedAt: event.occurredAt,
+      clientSecret: intent.client_secret,
+      customerId: intent.customer,
+      receivedAt: new Date(),
     });
 
-    const existingLedger = event.gatewayPaymentId
-      ? await fiatLedgerRepo.findByGatewayPaymentId(event.gatewayPaymentId)
-      : null;
+    const existingLedger = await fiatLedgerRepo.findByGatewayPaymentId(intent.id);
     if (existingLedger && existingLedger.status === 'settled') {
       return { alreadyProcessed: true };
     }
 
-    const ledgerEntry = existingLedger
-      ? existingLedger
-      : await fiatLedgerRepo.createEntry({
-          uid: account.uid,
-          type: 'credit',
-          source: 'deposit',
-          amount: event.amount,
-          currency: event.currency,
-          status: 'credited',
-          gatewayPaymentId: event.gatewayPaymentId,
-          referenceId: event.referenceId,
-          metadata: event.raw,
-          occurredAt: event.occurredAt,
-        });
+    const ledgerEntry =
+      existingLedger ||
+      (await fiatLedgerRepo.createEntry({
+        uid: deposit.userId,
+        type: 'credit',
+        source: 'deposit',
+        amount,
+        currency,
+        status: 'credited',
+        gatewayPaymentId: intent.id,
+        referenceId: intent.latest_charge,
+        metadata: intent,
+        occurredAt: new Date(),
+      }));
 
-    const wallet = await walletDetailsRepo.findByUid(account.uid);
+    const wallet = await walletDetailsRepo.findByUid(deposit.userId);
     if (!wallet) {
       throw new Error('Wallet not found for user');
     }
 
-    const mintResult = await kapitorTokenService.mintTo(wallet.walletAddress, event.amount);
+    const mintResult = await kapitorTokenService.mintTo(wallet.walletAddress, amount);
     await fiatLedgerRepo.updateStatus(ledgerEntry._id, 'settled', {
       notes: 'KPT minted',
     });
     await depositRequestRepo.markFiatStatus(deposit._id, 'minted', {
-      actualAmount: event.amount,
+      actualAmount: amount,
       status: 'confirmed',
     });
 
     await transactionRepo.create({
-      uid: account.uid,
+      uid: deposit.userId,
       chain: 'ethereum',
       network: process.env.ETH_NETWORK || 'mainnet',
       txHash: mintResult.txHash,
@@ -142,7 +155,7 @@ class FiatDepositService {
       tokenAddress: process.env.KPT_TOKEN_ADDRESS,
       symbol: 'KPT',
       decimals: kapitorTokenService.decimals,
-      amount: String(event.amount),
+      amount: String(amount),
       direction: 'in',
       type: 'transfer',
       status: mintResult.mock ? 'confirmed' : 'pending',
@@ -155,6 +168,29 @@ class FiatDepositService {
       depositId: deposit._id,
       ledgerId: ledgerEntry._id,
     };
+  }
+
+  async handlePaymentIntentFailure(intent) {
+    const deposit = await this.findDepositForIntent(intent);
+    if (!deposit) {
+      return { ignored: true, reason: 'Deposit not found for failure' };
+    }
+
+    await depositRequestRepo.markFiatStatus(deposit._id, 'failed', {
+      status: 'failed',
+      remarks: intent.last_payment_error?.message || 'Stripe payment failed',
+    });
+
+    return { status: 'failed', depositId: deposit._id };
+  }
+
+  async findDepositForIntent(intent) {
+    const depositId = intent.metadata?.depositId || intent.metadata?.deposit_id;
+    if (depositId) {
+      const deposit = await depositRequestRepo.findById(depositId);
+      if (deposit) return deposit;
+    }
+    return depositRequestRepo.findByGatewayPaymentId(intent.id);
   }
 }
 

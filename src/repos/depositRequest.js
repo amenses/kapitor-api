@@ -24,12 +24,6 @@ class DepositRequestRepository {
     });
   }
 
-  findLatestByVirtualAccountId(virtualAccountId) {
-    return DepositRequest.findOne({
-      virtualAccountId,
-    }).sort({ createdAt: -1 });
-  }
-
   updateById(id, update) {
     return DepositRequest.findByIdAndUpdate(id, update, { new: true });
   }
@@ -97,10 +91,10 @@ class DepositRequestRepository {
         gatewayPaymentId: payload.gatewayPaymentId,
         gatewayReferenceId: payload.gatewayReferenceId,
         fiatAmount: payload.amount,
-        fiatCurrency: payload.currency || 'INR',
-        virtualAccountId: payload.virtualAccountId,
-        virtualUpiId: payload.virtualUpiId,
+        fiatCurrency: payload.currency || 'USD',
         fiatStatus: payload.fiatStatus || 'pending',
+        stripeClientSecret: payload.clientSecret,
+        stripeCustomerId: payload.customerId,
         receivedAt: payload.receivedAt || new Date(),
       },
       { new: true }

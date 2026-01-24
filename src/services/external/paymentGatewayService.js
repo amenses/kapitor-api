@@ -3,86 +3,107 @@ const crypto = require('crypto');
 
 class PaymentGatewayService {
   constructor() {
-    this.baseUrl = process.env.CASHFREE_BASE_URL || 'https://sandbox.cashfree.com/pg';
-    this.payoutBaseUrl = process.env.CASHFREE_PAYOUT_BASE_URL;
-    this.appId = process.env.CASHFREE_APP_ID;
-    this.secretKey = process.env.CASHFREE_SECRET_KEY;
-    this.webhookSecret = process.env.CASHFREE_WEBHOOK_SECRET || '';
-    this.vaPrefix = process.env.CASHFREE_VA_PREFIX || 'KAPITOR';
-    this.mockMode = !this.appId || !this.secretKey;
+    this.secretKey = process.env.STRIPE_SECRET_KEY;
+    this.publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+    this.webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    this.defaultCurrency = (process.env.STRIPE_DEFAULT_CURRENCY || 'usd').toLowerCase();
+    this.paymentMethodTypes = (process.env.STRIPE_PAYMENT_METHOD_TYPES || 'card')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    this.webhookTolerance = Number(process.env.STRIPE_WEBHOOK_TOLERANCE || 300);
+    this.apiBase = 'https://api.stripe.com/v1';
   }
 
-  gatewayHeaders() {
-    if (this.mockMode) return {};
-    return {
-      'x-client-id': this.appId,
-      'x-client-secret': this.secretKey,
-      'Content-Type': 'application/json',
-    };
+  ensureConfigured() {
+    if (!this.secretKey) {
+      throw new Error('Stripe secret key not configured');
+    }
   }
 
-  async createVirtualAccount(payload) {
-    if (this.mockMode) {
-      const now = Date.now();
-      return {
-        id: `${this.vaPrefix}_${payload.customerId}`,
-        accountNumber: `99${now}`.slice(-12),
-        ifsc: 'CASHFREEXXX',
-        bankName: 'Cashfree Mock Bank',
-        upiId: `${this.vaPrefix.toLowerCase()}.${payload.customerId}@upi`,
-      };
+  currencyDecimals(currency = 'usd') {
+    const zeroDecimal = ['bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];
+    return zeroDecimal.includes(currency.toLowerCase()) ? 0 : 2;
+  }
+
+  toMinorUnits(amount, currency = this.defaultCurrency) {
+    const decimals = this.currencyDecimals(currency);
+    return Math.round(Number(amount) * 10 ** decimals);
+  }
+
+  fromMinorUnits(amount, currency = this.defaultCurrency) {
+    const decimals = this.currencyDecimals(currency);
+    return Number(amount) / 10 ** decimals;
+  }
+
+  async createPaymentIntent({ amount, currency, customerEmail, description, metadata }) {
+    this.ensureConfigured();
+    const body = new URLSearchParams();
+    body.append('amount', String(this.toMinorUnits(amount, currency)));
+    body.append('currency', (currency || this.defaultCurrency).toLowerCase());
+    const methods = this.paymentMethodTypes.length ? this.paymentMethodTypes : ['card'];
+    methods.forEach((method) => body.append('payment_method_types[]', method));
+    if (customerEmail) {
+      body.append('receipt_email', customerEmail);
+    }
+    body.append('capture_method', 'automatic');
+    if (description) {
+      body.append('description', description);
+    }
+    if (metadata) {
+      Object.entries(metadata).forEach(([key, value]) => {
+        body.append(`metadata[${key}]`, value);
+      });
     }
 
-    const response = await axios.post(
-      `${this.baseUrl}/virtualAccount/create`,
-      {
-        customer_name: payload.customerName,
-        customer_id: payload.customerId,
-        customer_email: payload.email,
-        customer_phone: payload.phone,
+    const response = await axios.post(`${this.apiBase}/payment_intents`, body, {
+      auth: { username: this.secretKey, password: '' },
+    });
+
+    return response.data;
+  }
+
+  verifyWebhookSignature(rawBody, signatureHeader) {
+    if (!this.webhookSecret) {
+      // If no secret configured we treat as always valid (development)
+      return { valid: true, payload: JSON.parse(rawBody) };
+    }
+
+    if (!signatureHeader) {
+      throw new Error('Missing Stripe-Signature header');
+    }
+
+    const parsed = signatureHeader.split(',').reduce(
+      (acc, part) => {
+        const [key, value] = part.split('=');
+        if (key === 't') acc.timestamp = Number(value);
+        if (key === 'v1') acc.signatures.push(value);
+        return acc;
       },
-      { headers: this.gatewayHeaders() }
+      { timestamp: null, signatures: [] }
     );
 
-    const data = response.data || {};
-    return {
-      id: data.virtual_account_id || data.virtualAccountId,
-      accountNumber: data.virtual_account_number || data.virtualAccountNumber,
-      ifsc: data.ifsc || data.virtual_account_ifsc,
-      bankName: data.bank || data.bank_name || 'Cashfree Partner Bank',
-      upiId: data.virtual_upi_id || data.vpa || data.upi_id || null,
-      raw: data,
-    };
-  }
-
-  verifyWebhookSignature(rawBody, signature) {
-    if (!this.webhookSecret) {
-      return this.mockMode;
+    if (!parsed.timestamp || parsed.signatures.length === 0) {
+      throw new Error('Invalid Stripe signature header');
     }
-    const computed = crypto
+
+    const expectedSignature = crypto
       .createHmac('sha256', this.webhookSecret)
-      .update(rawBody, 'utf8')
-      .digest('base64');
-    return computed === signature;
-  }
+      .update(`${parsed.timestamp}.${rawBody}`)
+      .digest('hex');
 
-  parseDepositPayload(payload) {
-    if (!payload) return null;
+    const signatureMatch = parsed.signatures.some((sig) => sig === expectedSignature);
 
-    // Handle both {data:{}} and flat payloads
-    const data = payload.data || payload;
-    if (!data) return null;
+    if (!signatureMatch) {
+      throw new Error('Stripe signature mismatch');
+    }
 
-    return {
-      virtualAccountId: data.vAccountId || data.virtual_account_id || data.virtualAccountId,
-      gatewayPaymentId: data.payment_reference_id || data.cf_payment_id || data.payment_id,
-      amount: Number(data.amount || data.order_amount || 0),
-      currency: data.currency || 'INR',
-      status: (data.status || payload.event || '').toString().toUpperCase(),
-      referenceId: data.referenceId || data.bank_reference || data.utr || null,
-      occurredAt: data.event_time ? new Date(data.event_time) : new Date(),
-      raw: payload,
-    };
+    const age = Math.abs(Date.now() / 1000 - parsed.timestamp);
+    if (age > this.webhookTolerance) {
+      throw new Error('Stripe webhook timestamp outside tolerance');
+    }
+
+    return { valid: true, payload: JSON.parse(rawBody) };
   }
 }
 

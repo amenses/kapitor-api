@@ -16,10 +16,6 @@ class FiatAccountRepository {
   findByUid(uid) {
     return FiatAccount.findOne({ uid });
   }
-
-  findByVirtualAccountId(virtualAccountId) {
-    return FiatAccount.findOne({ virtualAccountId });
-  }
 }
 
 module.exports = new FiatAccountRepository();

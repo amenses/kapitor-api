@@ -32,7 +32,7 @@ class FiatController {
     }
   }
 
-  async handleCashfreeWebhook(req, res, next) {
+  async handleStripeWebhook(req, res, next) {
     try {
       const rawBody = req.rawBody || JSON.stringify(req.body || {});
       const result = await fiatDepositService.handleGatewayWebhook(rawBody, req.headers);

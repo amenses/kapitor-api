@@ -64,7 +64,7 @@ const DepositRequestSchema = new mongoose.Schema(
     },
     fiatCurrency: {
       type: String,
-      default: 'INR',
+      default: 'USD',
     },
     fiatStatus: {
       type: String,
@@ -81,11 +81,11 @@ const DepositRequestSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    virtualAccountId: {
+    stripeCustomerId: {
       type: String,
       trim: true,
     },
-    virtualUpiId: {
+    stripeClientSecret: {
       type: String,
       trim: true,
     },
@@ -99,7 +99,6 @@ const DepositRequestSchema = new mongoose.Schema(
 
 DepositRequestSchema.index({ walletAddress: 1, status: 1 });
 DepositRequestSchema.index({ txHash: 1 });
-DepositRequestSchema.index({ virtualAccountId: 1, fiatStatus: 1 });
 DepositRequestSchema.index({ gatewayPaymentId: 1 });
 
 module.exports = mongoose.model('DepositRequest', DepositRequestSchema);
