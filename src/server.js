@@ -28,13 +28,38 @@ if (env.testMode) {
 
 // Validate environment variables
 validateEnv();
-
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Initialize Firebase
 initializeFirebase();
 
 // Create Express app
 const app = express();
+
+app.post('/fiat/webhook/stripe',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    if (!sig) {
+      console.log('Missing stripe-signature header');
+      return res.status(400).send('Missing signature');
+    }
+
+    // req.body will be a Buffer when using express.raw
+    // Do NOT JSON.parse or JSON.stringify req.body here
+    let event;
+    try {
+      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    } catch (err) {
+      console.log('⚠️ Webhook signature verification failed.', err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    // handle the event
+    console.log('Verified event:', event.type);
+    res.json({ received: true });
+  }
+);
 
 // Security middleware
 app.use(helmet());
@@ -88,7 +113,6 @@ app.use('/wallet', walletRouter);
 app.use('/kyb', kybRouter);
 app.use('/transaction', transactionRouter);
 app.use('/fiat', fiatRouter);
-
 // 404 handler
 app.use(notFoundHandler);
 

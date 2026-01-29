@@ -7,7 +7,6 @@ const { linkBankAccountSchema, depositIntentSchema } = require('../validators');
 const router = express.Router();
 
 // Webhook endpoints (no auth, signature handled in controller/service)
-router.post('/webhook/stripe', fiatController.handleStripeWebhook.bind(fiatController));
 router.post('/webhook/cashfree', fiatController.handleStripeWebhook.bind(fiatController));
 
 // Authenticated routes
