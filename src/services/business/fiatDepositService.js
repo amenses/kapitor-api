@@ -7,7 +7,7 @@ const {
 } = require('../../repos');
 const { paymentGatewayService } = require('../external');
 const kapitorTokenService = require('./kapitorTokenService');
-
+const stripe = require("stripe")
 class FiatDepositService {
   async createDepositIntent(uid, payload = {}) {
     const amount = Number(payload.amount);
@@ -64,8 +64,8 @@ class FiatDepositService {
     const signature =
       headers['stripe-signature'] || headers['Stripe-Signature'] || headers['stripe_signature'];
 
-    const { payload } = paymentGatewayService.verifyWebhookSignature(rawBody, signature);
-    const event = payload;
+    // const { payload } = paymentGatewayService.verifyWebhookSignature(rawBody, signature);
+    const event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
 
     switch (event.type) {
       case 'payment_intent.succeeded':

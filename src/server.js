@@ -17,6 +17,7 @@ const {
 const { errorHandler, notFoundHandler } = require('./middlewares');
 const { startUSDTListener } = require("./listeners/usdt.listener");
 const { startCronJobs } = require("./crons");
+const { fiatDepositService } = require('./services');
 
 // Only import test routes in test mode
 let testRouter = null;
@@ -47,16 +48,13 @@ app.post('/fiat/webhook/stripe',
 
     // req.body will be a Buffer when using express.raw
     // Do NOT JSON.parse or JSON.stringify req.body here
-    let event;
     try {
-      event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+      
+      fiatDepositService.handleGatewayWebhook(req.body, req.headers)
     } catch (err) {
       console.log('⚠️ Webhook signature verification failed.', err.message);
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
-
-    // handle the event
-    console.log('Verified event:', event.type);
     res.json({ received: true });
   }
 );
