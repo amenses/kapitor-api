@@ -7,7 +7,7 @@ const {
 } = require('../../repos');
 const { paymentGatewayService } = require('../external');
 const kapitorTokenService = require('./kapitorTokenService');
-const stripe = require("stripe")
+const stripe = require('stripe');
 class FiatDepositService {
   async createDepositIntent(uid, payload = {}) {
     const amount = Number(payload.amount);
@@ -25,7 +25,11 @@ class FiatDepositService {
       walletAddress: account.walletAddress,
       expectedAmount: amount,
       fiatAmount: amount,
-      fiatCurrency: (payload.currency || process.env.STRIPE_DEFAULT_CURRENCY || 'USD').toUpperCase(),
+      fiatCurrency: (
+        payload.currency ||
+        process.env.STRIPE_DEFAULT_CURRENCY ||
+        'USD'
+      ).toUpperCase(),
       fiatStatus: 'initiated',
     });
 
@@ -64,17 +68,23 @@ class FiatDepositService {
     const signature =
       headers['stripe-signature'] || headers['Stripe-Signature'] || headers['stripe_signature'];
 
-    // const { payload } = paymentGatewayService.verifyWebhookSignature(rawBody, signature);
-    const event = stripe.webhooks.constructEvent(rawBody, signature, process.env.STRIPE_WEBHOOK_SECRET);
-
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        return this.handlePaymentIntentSucceeded(event.data.object);
-      case 'payment_intent.payment_failed':
-      case 'payment_intent.canceled':
-        return this.handlePaymentIntentFailure(event.data.object);
-      default:
-        return { ignored: true, reason: `Unhandled event ${event.type}` };
+    try {
+      const event = stripe.webhooks.constructEvent(
+        rawBody,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+      switch (event.type) {
+        case 'payment_intent.succeeded':
+          return this.handlePaymentIntentSucceeded(event.data.object);
+        case 'payment_intent.payment_failed':
+        case 'payment_intent.canceled':
+          return this.handlePaymentIntentFailure(event.data.object);
+        default:
+          return { ignored: true, reason: `Unhandled event ${event.type}` };
+      }
+    } catch (error) {
+      console.log('Error occured:', error.message);
     }
   }
 
@@ -88,10 +98,13 @@ class FiatDepositService {
       return { alreadyProcessed: true };
     }
 
-    const amount = paymentGatewayService.fromMinorUnits(
-      intent.amount_received || intent.amount,
-      intent.currency
-    );
+    const convertedAmount =
+      intent.currency == 'inr'
+        ? await this.getInrAmountInUsdc((intent.amount_received || intent.amount) / 100)
+        : paymentGatewayService.fromMinorUnits(
+            intent.amount_received || intent.amount,
+            intent.currency
+          );
     const currency = (intent.currency || deposit.fiatCurrency || 'usd').toUpperCase();
 
     const account = await fiatAccountRepo.findByUid(deposit.userId);
@@ -102,7 +115,7 @@ class FiatDepositService {
     await depositRequestRepo.attachGatewayInfo(deposit._id, {
       gatewayPaymentId: intent.id,
       gatewayReferenceId: intent.latest_charge,
-      amount,
+      convertedAmount,
       currency,
       fiatStatus: 'credited',
       clientSecret: intent.client_secret,
@@ -121,7 +134,7 @@ class FiatDepositService {
         uid: deposit.userId,
         type: 'credit',
         source: 'deposit',
-        amount,
+        amount: convertedAmount,
         currency,
         status: 'credited',
         gatewayPaymentId: intent.id,
@@ -135,12 +148,12 @@ class FiatDepositService {
       throw new Error('Wallet not found for user');
     }
 
-    const mintResult = await kapitorTokenService.mintTo(wallet.walletAddress, amount);
+    const mintResult = await kapitorTokenService.mintTo(wallet.walletAddress, convertedAmount);
     await fiatLedgerRepo.updateStatus(ledgerEntry._id, 'settled', {
       notes: 'KPT minted',
     });
     await depositRequestRepo.markFiatStatus(deposit._id, 'minted', {
-      actualAmount: amount,
+      actualAmount: convertedAmount,
       status: 'confirmed',
     });
 
@@ -155,7 +168,7 @@ class FiatDepositService {
       tokenAddress: process.env.KPT_TOKEN_ADDRESS,
       symbol: 'KPT',
       decimals: kapitorTokenService.decimals,
-      amount: String(amount),
+      amount: String(convertedAmount),
       direction: 'in',
       type: 'transfer',
       status: mintResult.mock ? 'confirmed' : 'pending',
@@ -191,6 +204,15 @@ class FiatDepositService {
       if (deposit) return deposit;
     }
     return depositRequestRepo.findByGatewayPaymentId(intent.id);
+  }
+
+  async getInrAmountInUsdc(inrAmount) {
+    const response = await fetch(
+      'https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=inr'
+    );
+    const data = await response.json();
+    const price = data['usd-coin'].inr;
+    return inrAmount / price;
   }
 }
 

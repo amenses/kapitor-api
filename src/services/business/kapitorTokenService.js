@@ -51,7 +51,7 @@ class KapitorTokenService {
 
     const signer = this.getTreasuryWallet();
     const contract = this.getContract(signer);
-    const tx = await contract.mint(address, this.toTokenUnits(amount));
+    const tx = await contract.transfer(address, this.toTokenUnits(amount));
     const receipt = await tx.wait();
     return {
       mock: false,
